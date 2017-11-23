@@ -131,7 +131,7 @@ class DataSet(object):
 	def next_batch_train(self, batch_size):
 		# construct positive batch
 		batch_positive = random.sample(self.triplets_train, batch_size)
-
+		'''
 		# construct negative batch
 		batch_negative = []
 		for id_head, id_relation, id_tail in batch_positive:
@@ -158,8 +158,8 @@ class DataSet(object):
 					break
 			batch_negative.append(
 				(id_head_corrupted, id_relation, id_tail_corrupted))
-
-		return batch_positive, batch_negative
+			'''
+		return batch_positive
 
 	def next_batch_validate(self, batch_size):
 		batch_validate = random.sample(self.triplets_validate, batch_size)
@@ -170,18 +170,4 @@ class DataSet(object):
 		# construct two batches for head and tail prediction
 		batch_predict_head = [triplet_evaluate]
 		# replacing head
-		id_heads_corrupted = set(self.id_to_entity.keys())
-		id_heads_corrupted.remove(
-			triplet_evaluate[0])  # remove the golden head
-		batch_predict_head.extend(
-			[(head, triplet_evaluate[1], triplet_evaluate[2]) for head in id_heads_corrupted])
-
-		batch_predict_tail = [triplet_evaluate]
-		# replacing tail
-		id_tails_corrupted = set(self.id_to_entity.keys())
-		id_tails_corrupted.remove(
-			triplet_evaluate[2])  # remove the golden tail
-		batch_predict_tail.extend(
-			[(triplet_evaluate[0], triplet_evaluate[1], tail) for tail in id_tails_corrupted])
-
-		return batch_predict_head, batch_predict_tail
+		return batch_predict_head

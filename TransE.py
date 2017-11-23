@@ -17,14 +17,13 @@ class TransE(object):
         self.embedding_dimension = embedding_dimension
         self.dissimilarity = dissimilarity
         self.evaluate_size = evaluate_size
-    def inference(self, id_triplets_positive, id_triplets_negative):
+    def inference(self, id_triplets_positive):
         d_positive = self.get_dissimilarity(id_triplets_positive)
-        d_negative = self.get_dissimilarity(id_triplets_negative)
 
-        return d_positive, d_negative
-    def loss(self, d_positive, d_negative):
+        return d_positive
+    def loss(self, d_positive):
         margin = tf.constant(self.margin, tf.float32, shape=[self.batch_size], name="margin")
-        loss = tf.reduce_sum(tf.nn.relu(margin+d_positive-d_negative), name='max_margin_loss')
+        loss = tf.reduce_sum(tf.nn.relu(d_positive), name='max_margin_loss')
         return loss
     def train (self, loss):
         tf.summary.scalar(loss.op.name, loss)
@@ -47,9 +46,8 @@ class TransE(object):
         else:  # default: L1
             dissimilarity = tf.reduce_sum(tf.abs(embedding_head + embedding_relation - embedding_tail), axis=1)
         return dissimilarity
-    def evaluation(self, id_triplets_predict_head, id_triplets_predict_tail):
+    def evaluation(self, id_triplets_predict_head):
         # get one single validate triplet and do evaluation
         prediction_head = self.get_dissimilarity(id_triplets_predict_head)
-        prediction_tail = self.get_dissimilarity(id_triplets_predict_tail)
 
-        return prediction_head, prediction_tail
+        return prediction_head
