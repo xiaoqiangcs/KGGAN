@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+# 实现论文KBGAN: Adversarial Learning for Knowledge Graph Embeddings
 """
 @author:Wenqiang Liu
 @file:Main.py
