@@ -21,35 +21,32 @@ class TransE(object):
 	def inference(self, id_triplets_positive, id_triplets_negative):
 		d_positive = self.get_dissimilarity(id_triplets_positive)
 		d_negative = self.get_dissimilarity(id_triplets_negative)
-
 		return d_positive, d_negative
 
 	# 定义生成器生成负采样
 	def generater_negative_sampling(self, batch_negative):
 		id_triplets_negative = tf.Variable(tf.zeros(1,3))
-		negative_prob = tf.Variable([0.12])
+		negative_prob = []
 		for index in range(self.batch_size):
 			negative_set = batch_negative[index,:]
 			d_negative = self.get_dissimilarity(negative_set)
 			negative_log_prob = tf.nn.softmax(d_negative)
 			id_negative = np.arange(self.num_negative)
 			negative_sampling = np.random.choice(id_negative)
-			print(negative_sampling)
-			print(negative_log_prob)
 			id_triplets_negative = tf.concat([id_triplets_negative, negative_set[negative_sampling]], 0)
 			# id_triplets_negative = np.concatenate((id_triplets_negative, negative_set[negative_sampling]), axis=0)
 			# id_triplets_negative.append(negative_set[negative_sampling])
-			negative_prob=tf.concat([negative_prob, negative_log_prob[negative_sampling]], axis=0)
-		id_triplets_negative = id_triplets_negative.reshape(self.batch_size,3)
-		negative_prob = negative_prob.reshape(self.batch_size, 1)
+			negative_prob.append(negative_log_prob[negative_sampling])
+		id_triplets_negative = id_triplets_negative[1:]
+		id_triplets_negative = tf.reshape(id_triplets_negative,[self.batch_size,3])
 		return id_triplets_negative, negative_prob
 
 	# 定义生成器
-	def generator(self, negative_prob, id_triplets_negative):
+	def generator(self, id_triplets_negative, negative_prob):
 		d_negative = self.get_dissimilarity(id_triplets_negative)
-		reward_basline = tf.constant(tf.reduce_sum(d_negative),tf.float32,shape=[self.batch_size],name="reward_basline")
+		baseline = tf.reduce_sum(d_negative)
+		reward_basline = [baseline for _  in range(self.batch_size)]
 		reward = tf.add(d_negative,reward_basline)
-
 		g_loss = tf.reduce_mean(tf.log(negative_prob)*reward, name='generator_loss')
 		return g_loss
 	# 定义判别器

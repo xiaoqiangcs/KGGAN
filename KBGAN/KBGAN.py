@@ -58,12 +58,12 @@ def run_training(args):
 				d_loss = model.discriminator(d_positive, d_negative)
 			with tf.name_scope("generator"):
 			# model discriminator loss
-				g_loss = model.generator(id_triplets_negative, negative_prob)
+				g_loss = model.generator(triplets_negative, negative_prob)
 		with tf.name_scope('optimization'):
-			with tf.name_scope('discriminator optimization'):
+			with tf.name_scope('discriminatoroptimization'):
 			# model train operation
 				discriminator_train_op = model.discriminator_train(d_loss)
-			with tf.name_scope('generator optimization'):
+			with tf.name_scope('generatoroptimization'):
 				generator_train_op = model.generator_train(g_loss)
 		with tf.name_scope('evaluation'):
 			# model evaluation
@@ -103,18 +103,17 @@ def run_training(args):
 					id_triplets_positive: batch_positive,
 					id_triplets_negative: batch_negative
 				}
-				_, _, d_loss, g_loss,summary = sess.run([discriminator_train_op, generator_train_op, d_loss, g_loss, merge_summary_op],feed_dict=feed_dict_train)
-				d_loss_epoch += d_loss
-				g_loss_epoch += g_loss
+				_, _, d_loss_batch, g_loss_batch,summary = sess.run([discriminator_train_op, generator_train_op, d_loss, g_loss, merge_summary_op],feed_dict=feed_dict_train)
+				d_loss_epoch += d_loss_batch
+				g_loss_epoch += g_loss_batch
 				# write tensorboard logs
 				summary_writer.add_summary(summary, global_step=epoch * num_batch + batch)
 				# print an overview every 10 batches
 				if (batch + 1) % 100 == 0 or (batch + 1) == num_batch:
-					print('epoch {}, batch {}, d_loss: {}'.format(epoch, batch, d_loss))
-					print('epoch {}, batch {}, g_loss: {}'.format(epoch, batch, g_loss))
+					print('epoch {}, batch {}, d_loss: {}, g_loss: {}'.format(epoch, batch, d_loss_batch,g_loss_batch))
 			end_train = time.time()
-			print('epoch {}, mean batch d_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,d_loss_epoch / num_batch,end_train - start_train))
-			print('epoch {}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,g_loss_epoch / num_batch,end_train - start_train))
+			print('epoch {}, mean batch d_loss: {:.3f}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,d_loss_epoch / num_batch,g_loss_epoch / num_batch, end_train - start_train))
+			#print('epoch {}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,g_loss_epoch / num_batch,end_train - start_train))
 			# save a checkpoint every epoch
 			save_path = saver.save(sess, args.save_dir + 'model.ckpt')
 			print('model save in file {}'.format(save_path))
@@ -244,7 +243,7 @@ def main():
 	parser.add_argument(
 		'--batch_size',
 		type=int,
-		default=250,
+		default=150,
 		help='mini batch size for SGD'
 	)
 	parser.add_argument(
@@ -262,7 +261,7 @@ def main():
 	parser.add_argument(
 		'--embedding_dimension',
 		type=int,
-		default=150,
+		default=100,
 		help='dimension of entity and relation embeddings'
 	)
 	parser.add_argument(
