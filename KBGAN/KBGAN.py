@@ -57,7 +57,7 @@ def run_training(args):
 			# model discriminator loss
 				d_loss = model.discriminator(d_positive, d_negative)
 			with tf.name_scope("generator"):
-			# model discriminator loss
+			# model generator loss
 				g_loss = model.generator(triplets_negative, negative_prob)
 		with tf.name_scope('optimization'):
 			with tf.name_scope('discriminatoroptimization'):
@@ -103,17 +103,16 @@ def run_training(args):
 					id_triplets_positive: batch_positive,
 					id_triplets_negative: batch_negative
 				}
-				_, _, d_loss_batch, g_loss_batch,summary = sess.run([discriminator_train_op, generator_train_op, d_loss, g_loss, merge_summary_op],feed_dict=feed_dict_train)
+				_, _, d_loss_batch, g_loss_batch,summary = sess.run([discriminator_train_op, generator_train_op, d_loss, g_loss, merge_summary_op], feed_dict=feed_dict_train)
 				d_loss_epoch += d_loss_batch
 				g_loss_epoch += g_loss_batch
 				# write tensorboard logs
 				summary_writer.add_summary(summary, global_step=epoch * num_batch + batch)
 				# print an overview every 10 batches
 				if (batch + 1) % 100 == 0 or (batch + 1) == num_batch:
-					print('epoch {}, batch {}, d_loss: {}, g_loss: {}'.format(epoch, batch, d_loss_batch,g_loss_batch))
+					print('epoch {}, batch {}, d_loss: {}, g_loss: {}'.format(epoch, batch, d_loss_batch, g_loss_batch))
 			end_train = time.time()
-			print('epoch {}, mean batch d_loss: {:.3f}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,d_loss_epoch / num_batch,g_loss_epoch / num_batch, end_train - start_train))
-			#print('epoch {}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,g_loss_epoch / num_batch,end_train - start_train))
+			print('epoch {}, mean batch d_loss: {:.3f}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,d_loss_epoch / num_batch, g_loss_epoch / num_batch, end_train - start_train))
 			# save a checkpoint every epoch
 			save_path = saver.save(sess, args.save_dir + 'model.ckpt')
 			print('model save in file {}'.format(save_path))

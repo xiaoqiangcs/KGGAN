@@ -4,9 +4,7 @@
 @file:TransE.py
 @time:2017/11/720:39
 """
-from ReadData import DataSet
 import tensorflow as tf
-import random
 import numpy as np
 class TransE(object):
 	def __init__(self, learning_rate, batch_size, num_epoch, margin, embedding_dimension, dissimilarity, evaluate_size,num_negative):
