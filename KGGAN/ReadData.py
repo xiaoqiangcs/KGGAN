@@ -128,42 +128,42 @@ class DataSet(object):
 			)
 		))
 
-	def next_batch_train(self, batch_size, nega_num):
+	def next_batch_train(self, batch_size):
 		# construct positive batch
 		batch_positive = random.sample(self.triplets_train, batch_size)
+		#
+		# # construct negative batch
+		# batch_negative = []
+		# for id_head, id_relation, id_tail in batch_positive:
+		# 	batch_negative_element = []
+		# 	index = 0
+		# 	while index != nega_num:  # Extract nega_num negative_sample for every positive_samples
+		# 		id_head_corrupted = id_head
+		# 		id_tail_corrupted = id_tail
+		# 		if self.negative_sampling == 'unif':
+		# 			head_prob = binomial(1, 0.5)
+		# 		else:  # default: bern
+		# 			hpt, tph = self.relation_dist[id_relation]
+		# 			head_prob = binomial(1, (tph / (tph + hpt)))
+		#
+		# 		# corrupt head or tail, but not both
+		# 		while True:
+		# 			if head_prob:  # replace head
+		# 				id_head_corrupted = random.sample(
+		# 					list(self.entity_to_id.values()), 1)[0]
+		# 			else:  # replace tail
+		# 				id_tail_corrupted = random.sample(
+		# 					list(self.entity_to_id.values()), 1)[0]
+		#
+		# 			if (id_head_corrupted, id_relation,
+		# 					id_tail_corrupted) not in self.triplets_train_pool:
+		# 				break
+		# 		if (id_head_corrupted, id_relation, id_tail_corrupted) not in batch_negative_element:
+		# 			batch_negative_element.append((id_head_corrupted, id_relation, id_tail_corrupted))
+		# 			index += 1
+		# 	batch_negative.append(batch_negative_element)
 
-		# construct negative batch
-		batch_negative = []
-		for id_head, id_relation, id_tail in batch_positive:
-			batch_negative_element = []
-			index = 0
-			while index != nega_num:  # Extract nega_num negative_sample for every positive_samples
-				id_head_corrupted = id_head
-				id_tail_corrupted = id_tail
-				if self.negative_sampling == 'unif':
-					head_prob = binomial(1, 0.5)
-				else:  # default: bern
-					hpt, tph = self.relation_dist[id_relation]
-					head_prob = binomial(1, (tph / (tph + hpt)))
-
-				# corrupt head or tail, but not both
-				while True:
-					if head_prob:  # replace head
-						id_head_corrupted = random.sample(
-							list(self.entity_to_id.values()), 1)[0]
-					else:  # replace tail
-						id_tail_corrupted = random.sample(
-							list(self.entity_to_id.values()), 1)[0]
-
-					if (id_head_corrupted, id_relation,
-							id_tail_corrupted) not in self.triplets_train_pool:
-						break
-				if (id_head_corrupted, id_relation, id_tail_corrupted) not in batch_negative_element:
-					batch_negative_element.append((id_head_corrupted, id_relation, id_tail_corrupted))
-					index += 1
-			batch_negative.append(batch_negative_element)
-
-		return batch_positive, batch_negative
+		return batch_positive
 
 	def next_batch_validate(self, batch_size):
 		batch_validate = random.sample(self.triplets_validate, batch_size)

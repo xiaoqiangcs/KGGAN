@@ -23,19 +23,19 @@ def run_training(args):
 				   embedding_dimension=args.embedding_dimension,
 				   dissimilarity=args.dissimilarity,
 				   evaluate_size=args.evaluate_size,
-				   num_negative=args.num_negative)
+				   num_negative=args.num_negative,
+				   noise_dim =args.noise_dim)
 	#construct the training graph
 	num_negative = args.num_negative # 负采样的个数
+	noise_dim = args.noise_dim #潜在变量Latent的维度大小
 	graph_transe = tf.Graph()
 	with graph_transe.as_default():
 		print("constructing the traing graph")
+		with tf.variable_scope("Generator_Sampling"):
+			noise_Z = tf.placeholder(tf.float32, shape=[model.batch_size, num_negative * noise_dim])
+			# 输入随机噪声z而输出生成样本
 		with tf.variable_scope("input"):
 			id_triplets_positive = tf.placeholder(dtype=tf.int32, shape=[model.batch_size, 3], name='triplets_positive')
-			id_triplets_negative = tf.placeholder(dtype=tf.int32, shape=[model.batch_size, num_negative, 3], name='triplets_negative')
-			id_triplets_predict_head = tf.placeholder(dtype=tf.int32, shape=[dataset.num_entity, 3],
-													  name='triplets_predict_head')
-			id_triplets_predict_tail = tf.placeholder(dtype=tf.int32, shape=[dataset.num_entity, 3],
-													  name='triplets_predict_tail')
 		# embedding table
 		bound = 6 / math.sqrt(model.embedding_dimension)
 		with tf.variable_scope("embedding"):
@@ -46,28 +46,8 @@ def run_training(args):
 		with tf.name_scope('normalization'):
 			normalize_relation_op = embedding_relation.assign(tf.clip_by_norm(embedding_relation, clip_norm=1, axes=1))
 			normalize_entity_op = embedding_entity.assign(tf.clip_by_norm(embedding_entity, clip_norm=1, axes=1))
-
-		# ops into scopes, convenient for TensorBoard's Graph visualization
-		with tf.name_scope("Sampling"):
-			triplets_negative, negative_prob = model.generater_negative_sampling(id_triplets_negative)
-		with tf.name_scope("inference"):
-			d_positive, d_negative = model.inference(id_triplets_positive, triplets_negative)
-		with tf.name_scope('loss'):
-			with tf.name_scope("discriminator"):
-			# model discriminator loss
-				d_loss = model.discriminator(d_positive, d_negative)
-			with tf.name_scope("generator"):
-			# model generator loss
-				g_loss = model.generator(triplets_negative, negative_prob)
-		with tf.name_scope('optimization'):
-			with tf.name_scope('discriminatoroptimization'):
-			# model train operation
-				discriminator_train_op = model.discriminator_train(d_loss)
-			with tf.name_scope('generatoroptimization'):
-				generator_train_op = model.generator_train(g_loss)
-		with tf.name_scope('evaluation'):
-			# model evaluation
-			predict_head, predict_tail = model.evaluation(id_triplets_predict_head, id_triplets_predict_tail)
+		with tf.name_scope("generator"):
+			generator_train_op, g_loss = model.generator(noise_Z,id_triplets_positive)
 		print('graph constructing finished')
 		# initilize op
 		init_op = tf.global_variables_initializer()
@@ -92,39 +72,38 @@ def run_training(args):
 		print("star training ...")
 		start_total = time.time()
 		for epoch in range(model.num_epoch):
-			d_loss_epoch = 0.0
 			g_loss_epoch = 0.0
 			start_train = time.time()
 			for batch in range(num_batch):
 				# normalize entity embeddings before every batch
 				sess.run(normalize_entity_op)
-				batch_positive, batch_negative = dataset.next_batch_train(model.batch_size, num_negative)
-				feed_dict_train = {
-					id_triplets_positive: batch_positive,
-					id_triplets_negative: batch_negative
+				batch_positive = dataset.next_batch_train(model.batch_size)
+				noise_sample = model.sample_Z(model.batch_size, num_negative * noise_dim)
+				feed_dict_generator = {
+					noise_Z: noise_sample,
+					id_triplets_positive: batch_positive
 				}
-				_, _, d_loss_batch, g_loss_batch,summary = sess.run([discriminator_train_op, generator_train_op, d_loss, g_loss, merge_summary_op], feed_dict=feed_dict_train)
-				d_loss_epoch += d_loss_batch
+				_, g_loss_batch = sess.run([generator_train_op, g_loss], feed_dict=feed_dict_generator)
 				g_loss_epoch += g_loss_batch
 				# write tensorboard logs
-				summary_writer.add_summary(summary, global_step=epoch * num_batch + batch)
+				#summary_writer.add_summary(summary, global_step=epoch * num_batch + batch)
 				# print an overview every 10 batches
 				if (batch + 1) % 100 == 0 or (batch + 1) == num_batch:
-					print('epoch {}, batch {}, d_loss: {}, g_loss: {}'.format(epoch, batch, d_loss_batch, g_loss_batch))
+					print('epoch {}, batch {}, g_loss: {}'.format(epoch, batch,g_loss_batch))
 			end_train = time.time()
-			print('epoch {}, mean batch d_loss: {:.3f}, mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch,d_loss_epoch / num_batch, g_loss_epoch / num_batch, end_train - start_train))
+			print('epoch {},mean batch g_loss: {:.3f}, time elapsed last epoch: {:.3f}s'.format(epoch, g_loss_epoch / num_batch*10, end_train - start_train))
 			# save a checkpoint every epoch
 			save_path = saver.save(sess, args.save_dir + 'model.ckpt')
 			print('model save in file {}'.format(save_path))
 			# evaluate the model every 5 epochs
-			if (epoch + 1) % 5 == 0:
-				run_evaluation(sess,predict_head,predict_tail,model,dataset,id_triplets_predict_head,id_triplets_predict_tail)
+			# if (epoch + 1) % 5 == 0:
+			# 	run_evaluation(sess,predict_head,predict_tail,model,dataset,id_triplets_predict_head,id_triplets_predict_tail)
 		end_total = time.time()
 		print('total time elapsed: {:.3f}s'.format(end_total - start_total))
 		print('training finished')
 		print('Begian Test')
 		start_total = time.time()
-		run_test(sess,predict_head,predict_tail,model,dataset,id_triplets_predict_head,id_triplets_predict_tail)
+		# run_test(sess,predict_head,predict_tail,model,dataset,id_triplets_predict_head,id_triplets_predict_tail)
 		end_total = time.time()
 		print('total time elapsed: {:.3f}s'.format(end_total - start_total))
 		print('Test finished')
@@ -236,7 +215,7 @@ def main():
 	parser.add_argument(
 		'--learning_rate',
 		type=float,
-		default=0.01,
+		default=0.001,
 		help='initial learning rate'
 	)
 	parser.add_argument(
@@ -248,7 +227,7 @@ def main():
 	parser.add_argument(
 		'--num_epoch',
 		type=int,
-		default=100,
+		default=400,
 		help='number of epochs'
 	)
 	parser.add_argument(
@@ -260,7 +239,7 @@ def main():
 	parser.add_argument(
 		'--embedding_dimension',
 		type=int,
-		default=100,
+		default=300,
 		help='dimension of entity and relation embeddings'
 	)
 	parser.add_argument(
@@ -292,13 +271,19 @@ def main():
 	parser.add_argument(
 		'--num_negative',
 		type=int,
-		default=20,
+		default=30,
 		help='tensorflow checkpoint directory, for variable save and restore'
 	)
 	parser.add_argument(
 		'--reward_decay',
 		type=int,
 		default=20,
+		help='tensorflow checkpoint directory, for variable save and restore'
+	)
+	parser.add_argument(
+		'--noise_dim',
+		type=int,
+		default=30,
 		help='tensorflow checkpoint directory, for variable save and restore'
 	)
 	args = parser.parse_args()
