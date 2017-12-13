@@ -47,7 +47,9 @@ def run_training(args):
 			normalize_relation_op = embedding_relation.assign(tf.clip_by_norm(embedding_relation, clip_norm=1, axes=1))
 			normalize_entity_op = embedding_entity.assign(tf.clip_by_norm(embedding_entity, clip_norm=1, axes=1))
 		with tf.name_scope("generator"):
-			generator_train_op, g_loss = model.generator(noise_Z,id_triplets_positive)
+			G_prob, theta_G = model.generator(noise_Z)
+			batch_negative, loss_sum = model.get_negative_embedding(G_prob,dataset.num_entity)
+			D_log_prob = model.discriminator(id_triplets_positive,batch_negative)
 		print('graph constructing finished')
 		# initilize op
 		init_op = tf.global_variables_initializer()
@@ -71,10 +73,10 @@ def run_training(args):
 		# training
 		print("star training ...")
 		start_total = time.time()
-		for epoch in range(model.num_epoch):
+		for epoch in range(1):
 			g_loss_epoch = 0.0
 			start_train = time.time()
-			for batch in range(num_batch):
+			for batch in range(1):
 				# normalize entity embeddings before every batch
 				sess.run(normalize_entity_op)
 				batch_positive = dataset.next_batch_train(model.batch_size)
@@ -83,7 +85,8 @@ def run_training(args):
 					noise_Z: noise_sample,
 					id_triplets_positive: batch_positive
 				}
-				_, g_loss_batch = sess.run([generator_train_op, g_loss], feed_dict=feed_dict_generator)
+				batch, g_loss_batch = sess.run([batch_negative, loss_sum], feed_dict=feed_dict_generator)
+				print(batch)
 				g_loss_epoch += g_loss_batch
 				# write tensorboard logs
 				#summary_writer.add_summary(summary, global_step=epoch * num_batch + batch)
@@ -221,7 +224,7 @@ def main():
 	parser.add_argument(
 		'--batch_size',
 		type=int,
-		default=150,
+		default=5,
 		help='mini batch size for SGD'
 	)
 	parser.add_argument(
@@ -271,7 +274,7 @@ def main():
 	parser.add_argument(
 		'--num_negative',
 		type=int,
-		default=30,
+		default=5,
 		help='tensorflow checkpoint directory, for variable save and restore'
 	)
 	parser.add_argument(
