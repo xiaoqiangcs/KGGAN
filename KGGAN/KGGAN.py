@@ -36,6 +36,7 @@ def run_training(args):
 		with tf.variable_scope("Generator_Sampling"):
 			noise_z_dim = tf.placeholder(tf.float32, shape=[model.batch_size*num_negative, noise_dim])
 			type_y_dim = tf.placeholder(tf.float32, shape=[model.batch_size * num_negative, dataset.num_type])
+			random_dim = tf.placeholder(dtype=tf.int64, shape=[model.batch_size * num_negative, 2])
 		# 输入随机噪声z而输出生成样本
 		with tf.variable_scope("input"):
 			id_triplets_positive = tf.placeholder(dtype=tf.int64, shape=[model.batch_size, 3], name='triplets_positive')
@@ -57,7 +58,7 @@ def run_training(args):
 		with tf.name_scope("generator"):
 			G_prob, theta_G = model.generator(noise_z_dim,type_y_dim)
 			batch_negative, g_loss_sum = model.get_negative_embedding(G_prob)
-			batch_negative_sample, g_loss_fake = model.get_negative_sampling(batch_negative, id_triplets_positive)
+			batch_negative_sample, g_loss_fake = model.get_negative_sampling(batch_negative, id_triplets_positive,random_dim)
 		with tf.name_scope("loss"):
 			#生成器的损失函数为两部分，即E[log(-D(x))]和生成的负样例与所有entity最小距离的和
 			g_loss = g_loss_fake + g_loss_sum
@@ -80,8 +81,6 @@ def run_training(args):
 	# open a session and run the training graph
 	# session_config = tf.ConfigProto(log_device_placement=True)
 	# session_config.gpu_options.allow_growth = True
-	config = tf.ConfigProto()
-	config.gpu_options.per_process_gpu_memory_fraction = 1
 	with tf.Session(graph=graph_transe) as sess:
 		#run the initial operation
 		print("initializing all variables...")
@@ -108,7 +107,8 @@ def run_training(args):
 				feed_dict_generator = {
 					noise_z_dim: noise_sample,
 					id_triplets_positive: batch_positive,
-					type_y_dim: sess.run(y_dim)
+					type_y_dim: y_dim,
+					random_dim: type_y
 				}
 				_,_,g_loss_batch,d_loss_batch = sess.run([g_solver,d_solver, g_loss,d_loss], feed_dict=feed_dict_generator)
 				g_loss_epoch += g_loss_batch
@@ -155,18 +155,18 @@ def run_evaluation(sess,predict_head,predict_tail, model,dataset,id_triplets_pre
 		prediction_head, prediction_tail = sess.run([predict_head, predict_tail], feed_dict=feed_dict_eval)
 		rank_head_current = prediction_head.argsort().argmin()
 		rank_head += rank_head_current
-		if rank_head_current < 10:
+		if rank_head_current <= 10:
 			hit10_head += 1
-		if rank_head_current==1:
+		if rank_head_current<=1:
 			hit1_head +=1
 		rank_tail_current = prediction_tail.argsort().argmin()
 		rank_tail += rank_tail_current
-		if rank_tail_current < 10:
+		if rank_tail_current <= 10:
 			hit10_tail += 1
-		if rank_tail_current==1:
+		if rank_tail_current<=1:
 			hit1_tail +=1
 		evaluate_index+=1
-		if evaluate_index% 1000 ==0 :
+		if evaluate_index % 1000 ==0 :
 			print("evaluating the current:{:d}".format(evaluate_index))
 	rank_head_mean = rank_head // model.evaluate_size
 	hit10_head /= model.evaluate_size
@@ -199,15 +199,15 @@ def run_test(sess,predict_head,predict_tail, model,dataset,id_triplets_predict_h
 		prediction_head, prediction_tail = sess.run([predict_head, predict_tail], feed_dict=feed_dict_eval)
 		rank_head_current = prediction_head.argsort().argmin()
 		rank_head += rank_head_current
-		if rank_head_current < 10:
+		if rank_head_current <= 10:
 			hit10_head += 1
-		if rank_head_current==1:
+		if rank_head_current<=1:
 			hit1_head +=1
 		rank_tail_current = prediction_tail.argsort().argmin()
 		rank_tail += rank_tail_current
-		if rank_tail_current < 10:
+		if rank_tail_current <= 10:
 			hit10_tail += 1
-		if rank_tail_current==1:
+		if rank_tail_current<=1:
 			hit1_tail +=1
 		evaluate_index += 1
 		if evaluate_index % 1000 == 0:
@@ -243,19 +243,19 @@ def main():
 	parser.add_argument(
 		'--learning_rate',
 		type=float,
-		default=0.001,
+		default=0.0001,
 		help='initial learning rate'
 	)
 	parser.add_argument(
 		'--batch_size',
 		type=int,
-		default=150,
+		default=200,
 		help='mini batch size for SGD'
 	)
 	parser.add_argument(
 		'--num_epoch',
 		type=int,
-		default=50,
+		default=500,
 		help='number of epochs'
 	)
 	parser.add_argument(
@@ -299,7 +299,7 @@ def main():
 	parser.add_argument(
 		'--num_negative',
 		type=int,
-		default=10,
+		default=15,
 		help='tensorflow checkpoint directory, for variable save and restore'
 	)
 	parser.add_argument(
