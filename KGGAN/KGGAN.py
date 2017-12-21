@@ -65,9 +65,9 @@ def run_training(args):
 			t_vars = tf.trainable_variables()
 			d_var = [var for var in t_vars if 'dis' in var.name]
 			g_var = [var for var in t_vars if 'gen' in var.name]
-			g_solver = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate).minimize(g_loss,var_list=g_var)
+			g_solver = tf.train.AdamOptimizer(learning_rate=args.learning_rate).minimize(g_loss,var_list=g_var)
 			d_loss = model.discriminator_train(id_triplets_positive,batch_negative_sample)
-			d_solver = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate).minimize(d_loss,var_list=d_var)
+			d_solver = tf.train.AdamOptimizer(learning_rate=args.learning_rate).minimize(d_loss,var_list=d_var)
 		with tf.name_scope('evaluation'):
 			# model evaluation
 			predict_head, predict_tail = model.evaluation(id_triplets_predict_head, id_triplets_predict_tail)
@@ -134,6 +134,7 @@ def run_training(args):
 		run_test(sess,predict_head,predict_tail,model,dataset,id_triplets_predict_head,id_triplets_predict_tail)
 		end_total = time.time()
 		print('total time elapsed: {:.3f}s'.format(end_total - start_total))
+		print('args: {}'.format(args))
 		print('Test finished')
 def run_evaluation(sess,predict_head,predict_tail, model,dataset,id_triplets_predict_head,id_triplets_predict_tail):
 	print('evaluating the current model...')
@@ -299,7 +300,7 @@ def main():
 	parser.add_argument(
 		'--num_negative',
 		type=int,
-		default=15,
+		default=20,
 		help='tensorflow checkpoint directory, for variable save and restore'
 	)
 	parser.add_argument(
