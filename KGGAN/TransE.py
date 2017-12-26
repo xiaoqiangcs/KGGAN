@@ -10,7 +10,7 @@ import random
 from tensorflow.contrib.layers.python.layers import batch_norm
 import numpy as np
 class TransE(object):
-	def __init__(self, learning_rate, batch_size, num_epoch, margin, embedding_dimension, dissimilarity, evaluate_size,num_negative,noise_dim,num_type,entityid_to_typeid):
+	def __init__(self, learning_rate, batch_size, num_epoch, margin, embedding_dimension, dissimilarity, evaluate_size,num_negative,noise_dim,num_type,entityid_to_typeid,list_same_typeid):
 		self.learning_rate = learning_rate
 		self.batch_size = batch_size
 		self.num_epoch = num_epoch
@@ -22,6 +22,7 @@ class TransE(object):
 		self.noise_dim = noise_dim
 		self.num_type = num_type
 		self.entityid_to_typeid = entityid_to_typeid
+		self.list_same_typeid=list_same_typeid
 	# 定义一个可以生成m*n阶随机矩阵的函数，该矩阵的元素服从均匀分布，随机生成的z就为生成器的输入
 	def sample_Z(self, m, n):
 		return np.random.uniform(-1., 1., size=[m, n])
@@ -47,25 +48,36 @@ class TransE(object):
 		G_b2 = tf.Variable(tf.zeros(shape=[128]), name="gen_b2", dtype=tf.float32)
 
 		G_W3 = tf.Variable(self.variable_init([128, self.embedding_dimension]),name="gen_w3",dtype=tf.float32)
+
 		G_b3 = tf.Variable(tf.zeros(shape=[self.embedding_dimension]), name="gen_b3",dtype=tf.float32)
+
 		theta_G = [G_W1, G_W2, G_b1, G_b2]  # 梯度下降的参数范围
 		# 第一层先计算 y=z*G_W1+G-b1,然后投入激活函数计算G_h1=ReLU（y）,G_h1 为第二次层神经网络的输出激活值
 		G_h1 = tf.nn.relu(self.batch_normal(tf.matmul(noise_Z, G_W1) + G_b1))
 		# 以下两个语句计算第二层传播到第三层的激活结果，第三层的激活结果是含有784个元素的向量，该向量转化28×28就可以表示图像
 		G_h2 = tf.nn.relu(self.batch_normal(tf.matmul(G_h1, G_W2) + G_b2))
+
 		G_log_prob = tf.matmul(G_h2, G_W3) + G_b3
+
 		G_prob = tf.nn.softmax(G_log_prob)
+
 		G_prob = tf.reshape(G_prob,[self.batch_size,-1])
 		return G_prob, theta_G
-	def get_negative_embedding(self, G_prob):
+	def get_negative_embedding(self, G_prob, type_y_dim):
 		# 根据生成的实体，从图中获取离该节点最近的点的距离，并把该样例作为负样例get embedding from the graph
-		generator_samples = tf.reshape(G_prob,shape=[self.batch_size*self.num_negative,self.embedding_dimension])
+		type_id = tf.reshape(tf.to_int64(tf.argmax(type_y_dim, axis=1)),[-1,1])
+		generator_embedding = tf.reshape(G_prob, [self.batch_size*self.num_negative, self.embedding_dimension])
+		entity_type = tf.Variable(np.array(sorted(self.entityid_to_typeid.items())))
+		res_entity_type = tf.reshape(tf.gather(entity_type, [1], axis=1), [1, -1])
+		same_entity_type = tf.cast(tf.equal(type_id, res_entity_type), dtype=tf.float32)
 		with tf.variable_scope('embedding', reuse=True):
 			embedding_entity = tf.get_variable(name='dis_entity')
-		embedding_entity_extend =tf.transpose(embedding_entity, [1, 0])
-		dissimilarity = tf.matmul(generator_samples,embedding_entity_extend)
-		batch_negative = tf.reshape(tf.argmin(dissimilarity, axis=1),[self.batch_size,self.num_negative])
-		loss_sum = tf.reduce_sum(tf.abs(tf.reduce_min(dissimilarity,axis=1)))
+		embedding_entity_extend = tf.transpose(embedding_entity, [1, 0])
+		dissimilarity = tf.matmul(generator_embedding, embedding_entity_extend)
+		final_dissimilarity = tf.multiply(same_entity_type,dissimilarity)
+		loss_sum = tf.reduce_sum(tf.reduce_max(final_dissimilarity,axis=1))
+		maxvalue= tf.constant(99999,dtype=tf.float32)
+		batch_negative = tf.reshape(tf.argmin(tf.multiply(tf.cast(tf.equal(0.0,final_dissimilarity),dtype=tf.float32),maxvalue)+final_dissimilarity,axis=1), [self.batch_size, self.num_negative])
 		return batch_negative,loss_sum
 
 	def get_negative_sampling(self, batch_negative, id_triplets_positive,random_dim):
@@ -74,9 +86,9 @@ class TransE(object):
 		triplets_positive = tf.reshape(tf.tile(id_triplets_positive, [1, self.num_negative]), [-1, 3])
 		get_head = tf.multiply((1-tf.gather(random_dim, [0], axis=1)),tf.gather(triplets_positive, [0], axis=1))+tf.multiply((tf.gather(random_dim, [0], axis=1)),batch_negative_extend)
 		get_relation = tf.gather(triplets_positive, [1], axis=1)
-		get_tail= tf.multiply((1-tf.gather(random_dim, [1], axis=1)),tf.gather(triplets_positive, [2], axis=1))+tf.multiply((tf.gather(random_dim, [1], axis=1)),batch_negative_extend)
+		get_tail = tf.multiply((1-tf.gather(random_dim, [1], axis=1)),tf.gather(triplets_positive, [2], axis=1))+tf.multiply((tf.gather(random_dim, [1], axis=1)),batch_negative_extend)
 		batch_negative_sample = tf.concat([get_head,get_relation,get_tail],axis=1)
-		g_loss_fake = self.discriminator(batch_negative_sample, postive=False)
+		g_loss_fake = -self.discriminator(batch_negative_sample, postive=True)
 		batch_negative_sample = tf.reshape(batch_negative_sample, [self.batch_size, -1])
 		return batch_negative_sample, g_loss_fake
 	# 定义判别器
@@ -114,7 +126,7 @@ class TransE(object):
 		d_loss_negative = self.discriminator(id_triplets=tf.reshape(batch_negative_sample,[-1,3]),postive=False)
 		d_loss_distance = -(d_loss_positive + d_loss_negative)
 		d_loss_smooth = self.get_discriminator_smooth(id_triplets,batch_negative_sample)
-		d_loss = d_loss_distance+d_loss_smooth
+		d_loss = d_loss_distance + d_loss_smooth
 		return d_loss
 	def get_dissimilarity_head(self, id_positve_triplets,id_negatvie_triplets):
 		# get embedding from the graph
